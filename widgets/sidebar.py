@@ -20,11 +20,18 @@ class Sidebar(QFrame):
         self.setStyleSheet("background-color: #f0f0f0;")
         
         # Add sidebar buttons
-        self.buttons = []
-        modules = ["Home", "Cashier", "Inventory", "Reports", "Settings"]
-        for module in modules:
-            btn = QPushButton(module)
-            self.buttons.append(btn)
+        self.buttons = {}
+        modules = {
+            'home': 'Home',
+            'cashier': 'Cashier',
+            'inventory': 'Inventory',
+            'reports': 'Reports',
+            'settings': 'Settings'
+        }
+        
+        for route, label in modules.items():
+            btn = QPushButton(label)
+            self.buttons[route] = btn
             self.layout.addWidget(btn)
         
         self.layout.addStretch()

@@ -5,11 +5,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
     QPushButton, QComboBox, QSpinBox, QLabel, QHBoxLayout, QGridLayout, 
     QStackedWidget, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
+import bcrypt
 
 import widgets.sidebar as Sidebar
 import pages.login as Login
 import pages.home as Home
 import pages.cashier as Cashier
+import pages.settings as Settings
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -45,13 +47,21 @@ class MainWindow(QMainWindow):
         self.stacked_widget = QStackedWidget()
         self.main_layout.addWidget(self.stacked_widget)
 
-        # Add pages
-        self.stacked_widget.addWidget(Cashier.CashierPage())
-        self.stacked_widget.addWidget(Home.MainPage())
+        # Create pages dictionary to store pages and their indices
+        self.pages = {
+            'home': Home.MainPage(),
+            'cashier': Cashier.CashierPage(),
+            'settings': Settings.SettingsPage()
+        }
 
-        # Connect sidebar buttons
-        self.sidebar.buttons[0].clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
-        self.sidebar.buttons[1].clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
+        # Add pages to stacked widget and store their indices
+        for page in self.pages.values():
+            self.stacked_widget.addWidget(page)
+
+        # Connect sidebar buttons with named routes
+        self.sidebar.buttons['home'].clicked.connect(lambda: self.navigate_to('home'))
+        self.sidebar.buttons['cashier'].clicked.connect(lambda: self.navigate_to('cashier'))
+        self.sidebar.buttons['settings'].clicked.connect(lambda: self.navigate_to('settings'))
         
         # Add logout button to sidebar
         self.logout_btn = QPushButton("Logout")
@@ -95,6 +105,30 @@ class MainWindow(QMainWindow):
                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.central_stack.setCurrentIndex(0)
+
+    def navigate_to(self, route_name):
+        """Navigate to a specific page by route name"""
+        if route_name == 'settings' and not self.check_permission('settings_manage'):
+            QMessageBox.warning(self, "Access Denied", "You don't have permission to access this page")
+            return
+        
+        page = self.pages.get(route_name)
+        if page:
+            self.stacked_widget.setCurrentWidget(page)
+
+    def check_permission(self, permission_name):
+        """Check if current user has specific permission"""
+        # conn = sqlite3.connect(DB_PATH)
+        # cursor = conn.cursor()
+        # cursor.execute('''
+        #     SELECT COUNT(*) FROM users 
+        #     JOIN role_permissions ON users.role_id = role_permissions.role_id
+        #     JOIN permissions ON role_permissions.permission_id = permissions.id
+        #     WHERE users.username = ? AND permissions.name = ?
+        # ''', (self.current_user, permission_name))
+        # has_permission = cursor.fetchone()[0] > 0
+        # conn.close()
+        return True
 
 
 if __name__ == '__main__':
