@@ -38,16 +38,28 @@ class MainPage(QWidget):
         super().__init__()
         self.layout = QGridLayout(self)
         
-        # Create module buttons
-        modules = [
-            ("Cashier", None),
-            ("Inventory", None),
-            ("Reports", None),
-            ("Settings", None)
-        ]
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
         
-        for i, (title, icon) in enumerate(modules):
-            btn = ModuleButton(title, icon)
-            row = i // 2
-            col = i % 2
-            self.layout.addWidget(btn, row, col)
+        # Get active modules and their permissions
+        cursor.execute('''
+            SELECT 
+                m.name,
+                m.required_permission_id,
+                p.key as permission_key
+            FROM modules m
+            LEFT JOIN permissions p ON m.required_permission_id = p.permission_id
+            WHERE m.is_active = 1
+        ''')
+        available_modules = cursor.fetchall()
+        conn.close()
+        
+        row = 0
+        col = 0
+        for module_name, _, permission_key in available_modules:
+            if not permission_key or self.parent().check_permission(permission_key):
+                btn = ModuleButton(module_name.title(), None)
+                self.layout.addWidget(btn, row, col)
+                col = (col + 1) % 2
+                if col == 0:
+                    row += 1

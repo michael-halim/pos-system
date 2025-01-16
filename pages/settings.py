@@ -55,7 +55,7 @@ class UsersTab(QWidget):
         cursor.execute('''
             SELECT users.username, roles.name, users.is_active, users.created_at 
             FROM users 
-            JOIN roles ON users.role_id = roles.id
+            JOIN roles ON users.role_id = roles.role_id
         ''')
         users = cursor.fetchall()
         conn.close()
@@ -286,19 +286,19 @@ class RolesTab(QWidget):
         
         # Get roles with their permissions
         cursor.execute('''
-            SELECT r.id, r.name, r.description,
-                   GROUP_CONCAT(p.name) as permissions
+            SELECT r.role_id, r.name, r.description,
+                   GROUP_CONCAT(p.key) as permissions
             FROM roles r
-            LEFT JOIN role_permissions rp ON r.id = rp.role_id
-            LEFT JOIN permissions p ON rp.permission_id = p.id
-            GROUP BY r.id
+            LEFT JOIN role_permissions rp ON r.role_id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.permission_id
+            GROUP BY r.role_id
         ''')
         roles = cursor.fetchall()
         conn.close()
         
         self.table.setRowCount(len(roles))
-        for i, (role_id, name, description, permissions) in enumerate(roles):
-            self.table.setItem(i, 0, QTableWidgetItem(name))
+        for i, (role_id, key, description, permissions) in enumerate(roles):
+            self.table.setItem(i, 0, QTableWidgetItem(key))
             self.table.setItem(i, 1, QTableWidgetItem(description or ""))
             self.table.setItem(i, 2, QTableWidgetItem(permissions or ""))
             
@@ -569,23 +569,21 @@ class PermissionsTab(QWidget):
         
         cursor.execute('''
             SELECT 
-                p.id,
-                p.name,
-                p.description,
+                p.permission_id,
+                p.key,
                 GROUP_CONCAT(r.name) as roles
             FROM permissions p
-            LEFT JOIN role_permissions rp ON p.id = rp.permission_id
-            LEFT JOIN roles r ON rp.role_id = r.id
-            GROUP BY p.id
+            LEFT JOIN role_permissions rp ON p.permission_id = rp.permission_id
+            LEFT JOIN roles r ON rp.role_id = r.role_id
+            GROUP BY p.permission_id
         ''')
         permissions = cursor.fetchall()
         conn.close()
         
         self.table.setRowCount(len(permissions))
-        for i, (perm_id, name, description, roles) in enumerate(permissions):
-            self.table.setItem(i, 0, QTableWidgetItem(name))
-            self.table.setItem(i, 1, QTableWidgetItem(description or ""))
-            self.table.setItem(i, 2, QTableWidgetItem(roles or ""))
+        for i, (perm_id, key, roles) in enumerate(permissions):
+            self.table.setItem(i, 0, QTableWidgetItem(key))
+            self.table.setItem(i, 1, QTableWidgetItem(roles or ""))
             
             # Add action buttons
             actions = QWidget()
@@ -665,18 +663,18 @@ class ModulesTab(QWidget):
         # Get modules with their required permissions
         cursor.execute('''
             SELECT 
-                m.id,
+                m.module_id,
                 m.name,
                 m.is_active,
-                p.name as permission_name
+                p.key as permission_key
             FROM modules m
-            LEFT JOIN permissions p ON m.required_permission_id = p.id
+            LEFT JOIN permissions p ON m.required_permission_id = p.permission_id
         ''')
         modules = cursor.fetchall()
         conn.close()
         
         self.table.setRowCount(len(modules))
-        for i, (module_id, name, is_active, permission) in enumerate(modules):
+        for i, (module_id, name, is_active, permission_key) in enumerate(modules):
             # Module name
             self.table.setItem(i, 0, QTableWidgetItem(name))
             
@@ -692,7 +690,7 @@ class ModulesTab(QWidget):
             self.table.setCellWidget(i, 1, status_widget)
             
             # Required permission
-            self.table.setItem(i, 2, QTableWidgetItem(permission or "None"))
+            self.table.setItem(i, 2, QTableWidgetItem(permission_key or "None"))
             
             # Actions
             actions = QWidget()
@@ -794,7 +792,7 @@ class EditModuleDialog(QDialog):
         
         try:
             cursor.execute(
-                "UPDATE modules SET required_permission_id = ? WHERE id = ?",
+                "UPDATE modules SET required_permission_id = ? WHERE module_id = ?",
                 (permission_id, self.module_id)
             )
             conn.commit()

@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_stack)
         
         # Create login page
-        self.login_page = Login.MainPage()
+        self.login_page = Login.LoginPage()
         self.login_page.login_successful.connect(self.on_login_success)
         self.central_stack.addWidget(self.login_page)
         
@@ -92,13 +92,8 @@ class MainWindow(QMainWindow):
         self.central_stack.setCurrentIndex(1)
     
     def handle_login(self):
-        username = self.login_page.username.text()
-        password = self.login_page.password.text()
-        if username == "admin" and password == "password":
+        if self.login_page.check_credentials():
             self.central_stack.setCurrentIndex(1)
-        else:
-            QMessageBox.warning(self, "Login Failed", "Invalid username or password")
-
 
     def handle_logout(self):
         reply = QMessageBox.question(self, 'Logout', 'Are you sure you want to logout?',
@@ -121,10 +116,10 @@ class MainWindow(QMainWindow):
         # conn = sqlite3.connect(DB_PATH)
         # cursor = conn.cursor()
         # cursor.execute('''
-        #     SELECT COUNT(*) FROM users 
-        #     JOIN role_permissions ON users.role_id = role_permissions.role_id
-        #     JOIN permissions ON role_permissions.permission_id = permissions.id
-        #     WHERE users.username = ? AND permissions.name = ?
+        #     SELECT COUNT(*) FROM users u
+        #     JOIN role_permissions rp ON u.role_id = rp.role_id
+        #     JOIN permissions p ON rp.permission_id = p.permission_id
+        #     WHERE u.username = ? AND p.key = ?
         # ''', (self.current_user, permission_name))
         # has_permission = cursor.fetchone()[0] > 0
         # conn.close()

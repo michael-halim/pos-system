@@ -44,7 +44,7 @@ class CashierPage(QMainWindow):
     def load_products(self):
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name FROM products")
+        cursor.execute("SELECT product_id, name FROM products")
         products = cursor.fetchall()
         conn.close()
 
@@ -57,7 +57,7 @@ class CashierPage(QMainWindow):
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT price FROM products WHERE id = ?", (product_id,))
+        cursor.execute("SELECT price FROM products WHERE product_id = ?", (product_id,))
         # price = cursor.fetchone()
         # total = price * quantity
 

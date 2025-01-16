@@ -1,13 +1,23 @@
 import sqlite3
+import bcrypt
 
 def setup_database(db_path: str):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
+    # Drop all existing tables first
+    cursor.execute("DROP TABLE IF EXISTS role_permissions")
+    cursor.execute("DROP TABLE IF EXISTS modules")
+    cursor.execute("DROP TABLE IF EXISTS permissions")
+    cursor.execute("DROP TABLE IF EXISTS transactions")
+    cursor.execute("DROP TABLE IF EXISTS users")
+    cursor.execute("DROP TABLE IF EXISTS roles")
+    cursor.execute("DROP TABLE IF EXISTS products")
+
     # Create tables for products
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY,
+            product_id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             price REAL NOT NULL
         )
@@ -16,30 +26,29 @@ def setup_database(db_path: str):
     # Create tables for transactions
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY,
+            transaction_id INTEGER PRIMARY KEY,
             product_id INTEGER NOT NULL,
             quantity INTEGER NOT NULL,
             total REAL NOT NULL,
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (product_id) REFERENCES products(id)
+            FOREIGN KEY (product_id) REFERENCES products(product_id)
         )
     ''')
 
     # Create roles table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            description TEXT
+            role_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE CHECK(length(name) <= 20),
+            description TEXT CHECK(length(description) <= 60)
         )
     ''')
 
-    # Create permissions table
+    # Create permissions table with module-specific permissions
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS permissions (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            description TEXT
+            permission_id INTEGER PRIMARY KEY,
+            key TEXT NOT NULL UNIQUE
         )
     ''')
 
@@ -48,8 +57,8 @@ def setup_database(db_path: str):
         CREATE TABLE IF NOT EXISTS role_permissions (
             role_id INTEGER,
             permission_id INTEGER,
-            FOREIGN KEY (role_id) REFERENCES roles(id),
-            FOREIGN KEY (permission_id) REFERENCES permissions(id),
+            FOREIGN KEY (role_id) REFERENCES roles(role_id),
+            FOREIGN KEY (permission_id) REFERENCES permissions(permission_id),
             PRIMARY KEY (role_id, permission_id)
         )
     ''')
@@ -57,77 +66,103 @@ def setup_database(db_path: str):
     # Create users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
+            user_id INTEGER PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             role_id INTEGER,
             is_active BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (role_id) REFERENCES roles(id)
+            FOREIGN KEY (role_id) REFERENCES roles(role_id)
+        )
+    ''')
+
+    # Create modules table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS modules (
+            module_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            is_active BOOLEAN DEFAULT 1,
+            required_permission_id INTEGER,
+            FOREIGN KEY (required_permission_id) REFERENCES permissions(permission_id)
         )
     ''')
 
     # Insert default roles
     cursor.execute('''
-        INSERT OR IGNORE INTO roles (name, description) VALUES 
+        INSERT INTO roles (name, description) VALUES 
         ('admin', 'Full system access'),
         ('manager', 'Store management access'),
         ('cashier', 'Basic cashier access')
     ''')
 
-    # Insert default permissions
+    # Insert default permissions with module-specific actions
     cursor.execute('''
-        INSERT OR IGNORE INTO permissions (name, description) VALUES 
-        ('user_manage', 'Can manage users'),
-        ('inventory_manage', 'Can manage inventory'),
-        ('sales_view', 'Can view sales reports'),
-        ('sales_create', 'Can create sales'),
-        ('settings_manage', 'Can manage settings')
-    ''')
-
-     # Create modules table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS modules (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            is_active BOOLEAN DEFAULT 1,
-            required_permission_id INTEGER,
-            FOREIGN KEY (required_permission_id) REFERENCES permissions(id)
-        )
+        INSERT INTO permissions (key) VALUES 
+        ('users_read'),
+        ('users_write'),
+        ('users_update'),
+        ('users_delete'),
+        ('inventory_read'),
+        ('inventory_write'),
+        ('inventory_update'),
+        ('inventory_delete'),
+        ('sales_read'),
+        ('sales_write'),
+        ('sales_update'),
+        ('sales_delete'),
+        ('reports_read'),
+        ('settings_read'),
+        ('settings_write'),
+        ('settings_update'),
+        ('settings_delete')
     ''')
 
     # Insert default modules
     cursor.execute('''
-        INSERT OR IGNORE INTO modules (name, required_permission_id) VALUES 
-        ('home', NULL),
-        ('cashier', (SELECT id FROM permissions WHERE name = 'sales_create')),
-        ('inventory', (SELECT id FROM permissions WHERE name = 'inventory_manage')),
-        ('reports', (SELECT id FROM permissions WHERE name = 'sales_view')),
-        ('settings', (SELECT id FROM permissions WHERE name = 'settings_manage'))
+        INSERT INTO modules (name, is_active) VALUES 
+        ('home', 1),
+        ('cashier', 1),
+        ('inventory', 1),
+        ('reports', 1),
+        ('settings', 1)
     ''')
 
-     # Add default admin user if it doesn't exist
-    # admin_password = bcrypt.hashpw("admin".encode('utf-8'), bcrypt.gensalt())
+    # Add default admin user with bcrypt hashed password
+    default_password = 'admin123'  # You should change this in production
+    password_hash = bcrypt.hashpw(default_password.encode('utf-8'), bcrypt.gensalt())
+    
     cursor.execute('''
-        INSERT OR IGNORE INTO users (username, password_hash, role_id, is_active)
-        VALUES (?, ?, (SELECT id FROM roles WHERE name = 'admin'), 1)
-    ''', ('admin', 'password'))
+        INSERT INTO users (username, password_hash, role_id, is_active)
+        VALUES (?, ?, (SELECT role_id FROM roles WHERE name = 'admin'), 1)
+    ''', ('admin', password_hash))
 
+    # Define permission assignments for each role
+    admin_permissions = [
+        'users_read', 'users_write', 'users_update', 'users_delete',
+        'inventory_read', 'inventory_write', 'inventory_update', 'inventory_delete',
+        'sales_read', 'sales_write', 'sales_update', 'sales_delete',
+        'reports_read',
+        'settings_read', 'settings_write', 'settings_update', 'settings_delete'
+    ]
+    
+    manager_permissions = [
+        'inventory_read', 'inventory_write', 'inventory_update',
+        'sales_read', 'sales_write', 'sales_update',
+        'reports_read'
+    ]
+    
+    cashier_permissions = [
+        'sales_read', 'sales_write'
+    ]
 
-     # Assign default permissions to roles
-    admin_permissions = ['user_manage', 'inventory_manage', 'sales_view', 'sales_create', 'settings_manage']
-    manager_permissions = ['inventory_manage', 'sales_view', 'sales_create']
-    cashier_permissions = ['sales_create', 'sales_view']
-
-     # Helper function to assign permissions
-    def assign_role_permissions(role_name, permission_names):
-        cursor.execute('SELECT id FROM roles WHERE name = ?', (role_name,))
+    def assign_role_permissions(role_name, permission_keys):
+        cursor.execute('SELECT role_id FROM roles WHERE name = ?', (role_name,))
         role_id = cursor.fetchone()[0]
         
-        for perm_name in permission_names:
-            cursor.execute('SELECT id FROM permissions WHERE name = ?', (perm_name,))
+        for perm_key in permission_keys:
+            cursor.execute('SELECT permission_id FROM permissions WHERE key = ?', (perm_key,))
             perm_id = cursor.fetchone()[0]
-            cursor.execute('INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
+            cursor.execute('INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)',
                          (role_id, perm_id))
 
     assign_role_permissions('admin', admin_permissions)
